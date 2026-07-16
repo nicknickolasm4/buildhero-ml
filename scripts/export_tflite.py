@@ -33,7 +33,7 @@ MODEL_NAME = "electrical_detector.tflite"
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--weights", required=True)
-    parser.add_argument("--imgsz", type=int, default=640)
+    parser.add_argument("--imgsz", type=int, default=960)  # 960: outlets ~2-4 m away are too few pixels at 640 for reliable detection
     parser.add_argument("--int8", action="store_true",
                         help="full int8 quantization (smaller/faster, needs dataset for calibration)")
     parser.add_argument("--install", action="store_true",
