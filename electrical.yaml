@@ -1,0 +1,10 @@
+# Ultralytics data config — electrical fixture detection.
+# Class ids are a contract with the mobile apps: never reorder.
+path: data/dataset
+train: train/images
+val: valid/images
+
+names:
+  0: outlet
+  1: switch
+  2: light

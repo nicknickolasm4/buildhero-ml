@@ -1,0 +1,9 @@
+.venv/
+data/
+runs/
+exports/
+*.pt
+*.mlpackage
+*.tflite
+*.onnx
+__pycache__/
