@@ -33,6 +33,15 @@ def main() -> None:
     parser.add_argument("--skip-train", action="store_true")
     parser.add_argument("--weights", default=str(DEFAULT_WEIGHTS),
                          help="weights to export (default: freshly trained best.pt)")
+    # Defaults sized for a 16 GB Apple Silicon Mac: MPS GPU, small batch at
+    # the 960 input the mobile export uses.
+    parser.add_argument("--imgsz", type=int, default=960)
+    parser.add_argument("--epochs", type=int, default=80)
+    parser.add_argument("--batch", type=int, default=6)
+    parser.add_argument("--device", default="mps",
+                        help="'mps' (Apple Silicon), 'cpu', or a CUDA index")
+    parser.add_argument("--skip-tflite", action="store_true",
+                        help="skip the Android TFLite export (needs TensorFlow)")
     args = parser.parse_args()
 
     if not args.skip_download:
@@ -41,14 +50,23 @@ def main() -> None:
         run(sys.executable, str(SCRIPTS_DIR / "download_roboflow.py"))
 
     if not args.skip_train:
-        run(sys.executable, str(SCRIPTS_DIR / "train.py"))
+        run(
+            sys.executable, str(SCRIPTS_DIR / "train.py"),
+            "--imgsz", str(args.imgsz),
+            "--epochs", str(args.epochs),
+            "--batch", str(args.batch),
+            "--device", args.device,
+        )
 
     weights = Path(args.weights)
     if not weights.exists():
         sys.exit(f"weights not found: {weights} (train first, or pass --weights)")
 
-    run(sys.executable, str(SCRIPTS_DIR / "export_coreml.py"), "--weights", str(weights), "--install")
-    run(sys.executable, str(SCRIPTS_DIR / "export_tflite.py"), "--weights", str(weights), "--install")
+    run(sys.executable, str(SCRIPTS_DIR / "export_coreml.py"),
+        "--weights", str(weights), "--imgsz", str(args.imgsz), "--install")
+    if not args.skip_tflite:
+        run(sys.executable, str(SCRIPTS_DIR / "export_tflite.py"),
+            "--weights", str(weights), "--imgsz", str(args.imgsz), "--install")
 
     print("\ndone — models installed into buildheroios/local_modules/react-native-room-scanner/")
 
