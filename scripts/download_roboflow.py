@@ -93,24 +93,13 @@ def download(source: dict, api_key: str) -> Path:
 
 def source_class_names(export_dir: Path) -> list[str]:
     """Read the class list from the export's data.yaml (names: list or dict)."""
-    import re
+    import yaml
 
-    text = (export_dir / "data.yaml").read_text()
-    list_match = re.search(r"names:\s*\[(.*?)\]", text, re.S)
-    if list_match:
-        return [n.strip().strip("'\"") for n in list_match.group(1).split(",")]
-    names: dict[int, str] = {}
-    in_names = False
-    for line in text.splitlines():
-        if line.strip().startswith("names:"):
-            in_names = True
-            continue
-        if in_names:
-            m = re.match(r"\s+(\d+):\s*(.+)", line)
-            if not m:
-                break
-            names[int(m.group(1))] = m.group(2).strip().strip("'\"")
-    return [names[i] for i in sorted(names)]
+    data = yaml.safe_load((export_dir / "data.yaml").read_text())
+    names = data.get("names", [])
+    if isinstance(names, dict):
+        return [names[i] for i in sorted(names)]
+    return list(names)
 
 
 def remap_line(line: str, id_map: dict[int, int]) -> str | None:
