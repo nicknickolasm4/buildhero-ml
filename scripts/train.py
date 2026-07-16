@@ -27,7 +27,8 @@ def main() -> None:
                              "300 ms detection throttle. (YOLO12's attention layers "
                              "convert worse to CoreML/ANE; stay on the 11 family.)")
     parser.add_argument("--epochs", type=int, default=100)
-    parser.add_argument("--imgsz", type=int, default=640)
+    # Matches the 960 mobile export — train and deploy at the same input size.
+    parser.add_argument("--imgsz", type=int, default=960)
     parser.add_argument("--batch", type=int, default=16,
                         help="lower to ~4-8 for imgsz 960 on a 16 GB Apple Silicon Mac")
     parser.add_argument("--device", default=None,
