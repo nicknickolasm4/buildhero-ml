@@ -38,6 +38,12 @@ CLASS_ALIASES = {
     "electrical outlet": "outlet",
     "wall socket": "outlet",
     "tomada": "outlet",
+    # Home-inspection datasets commonly label wall receptacles "plug(s)".
+    "plug": "outlet",
+    "plugs": "outlet",
+    "power plug": "outlet",
+    "wall plug": "outlet",
+    "receptacle": "outlet",
     "plug_2pin": "outlet",
     "plug_3pin": "outlet",
     "plug_rectangle": "outlet",
@@ -66,6 +72,11 @@ CLASS_ALIASES = {
 DEFAULT_SOURCES = [
     {"workspace": "yolov5-dtypd", "project": "plug-socket-detect", "version": 1},
     {"workspace": "biiim", "project": "rocker", "version": 1},
+    # Added 2026-07-16: broader outlet/switch coverage for distance recall.
+    # "latest" resolves to the newest generated version at download time.
+    {"workspace": "logansdg", "project": "sensors-switches-and-plugs", "version": "latest"},
+    {"workspace": "socket-vflei", "project": "socket-and-switch", "version": "latest"},
+    {"workspace": "mateo-ojeda", "project": "light-switch-mqb8v", "version": "latest"},
 ]
 
 # Roboflow YOLOv8 exports use these split dir names.
@@ -78,16 +89,31 @@ def load_sources(path: str | None) -> list[dict]:
     return json.loads(Path(path).read_text())
 
 
+def resolve_version(project, requested) -> int:
+    """A source may pin a version number or say "latest" (also the default
+    when the key is omitted) — resolved against the project's generated
+    versions at download time."""
+    if requested not in (None, "latest"):
+        return int(requested)
+    versions = project.versions()
+    if not versions:
+        raise RuntimeError("project has no generated versions to download")
+    return max(int(str(v.id).split("/")[-1]) for v in versions)
+
+
 def download(source: dict, api_key: str) -> Path:
     from roboflow import Roboflow
 
     rf = Roboflow(api_key=api_key)
     project = rf.workspace(source["workspace"]).project(source["project"])
-    dest = DOWNLOADS_DIR / f"{source['workspace']}__{source['project']}__v{source['version']}"
+    version = resolve_version(project, source.get("version"))
+    # Write back so the caller's merge prefix carries the real number.
+    source["version"] = version
+    dest = DOWNLOADS_DIR / f"{source['workspace']}__{source['project']}__v{version}"
     if dest.exists():
         print(f"  already downloaded: {dest.name}")
         return dest
-    dataset = project.version(source["version"]).download("yolov8", location=str(dest))
+    dataset = project.version(version).download("yolov8", location=str(dest))
     return Path(dataset.location)
 
 
