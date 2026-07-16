@@ -27,14 +27,15 @@ DOWNLOADS_DIR = ML_ROOT / "data" / "downloads"
 
 CANONICAL = {"outlet": 0, "switch": 1, "light": 2}
 
-# Lowercased source-class → canonical name. Extend as new sources are added.
+# Normalized source-class → canonical name. Lookup lowercases the name and
+# turns -/_ into spaces first, so one entry covers light-switch/light_switch/
+# Light Switch. Extend as new sources are added.
 CLASS_ALIASES = {
     "outlet": "outlet",
     "outlets": "outlet",
     "socket": "outlet",
     "sockets": "outlet",
     "power outlet": "outlet",
-    "power_outlet": "outlet",
     "electrical outlet": "outlet",
     "wall socket": "outlet",
     "tomada": "outlet",
@@ -44,16 +45,19 @@ CLASS_ALIASES = {
     "power plug": "outlet",
     "wall plug": "outlet",
     "receptacle": "outlet",
-    "plug_2pin": "outlet",
-    "plug_3pin": "outlet",
-    "plug_rectangle": "outlet",
+    "plug 2pin": "outlet",
+    "plug 3pin": "outlet",
+    "plug rectangle": "outlet",
     "switch": "switch",
     "switches": "switch",
     "light switch": "switch",
-    "light_switch": "switch",
-    "light-switch": "switch",
     "wall switch": "switch",
     "interruptor": "switch",
+    # biiim/rocker labels the switch by its state.
+    "on": "switch",
+    "off": "switch",
+    # mateo-ojeda/light-switch-mqb8v ships this typo.
+    "ligth switch": "switch",
     "light": "light",
     "lights": "light",
     "lamp": "light",
@@ -62,6 +66,11 @@ CLASS_ALIASES = {
     "luminaria": "light",
     "luminária": "light",
 }
+
+
+def canonical_for(name: str) -> str | None:
+    normalized = " ".join(name.lower().replace("-", " ").replace("_", " ").split())
+    return CLASS_ALIASES.get(normalized)
 
 # Public Roboflow Universe projects used for US-standard pre-training.
 # Format: workspace, project, version. Override with --sources <json file>
@@ -74,10 +83,16 @@ DEFAULT_SOURCES = [
     {"workspace": "biiim", "project": "rocker", "version": 1},
     # Added 2026-07-16: broader outlet/switch coverage for distance recall.
     # "latest" resolves to the newest generated version at download time.
-    {"workspace": "logansdg", "project": "sensors-switches-and-plugs", "version": "latest"},
+    # (logansdg/sensors-switches-and-plugs was removed upstream — API 404s.)
     {"workspace": "socket-vflei", "project": "socket-and-switch", "version": "latest"},
     {"workspace": "mateo-ojeda", "project": "light-switch-mqb8v", "version": "latest"},
 ]
+
+# Images whose labels all got dropped become negatives. A few help precision;
+# thousands (socket-and-switch v2: 6515 imgs / 244 boxes) drown the positives
+# and teach the model to ignore fixtures, so cap them per source.
+NEGATIVE_RATIO_CAP = 0.2
+NEGATIVE_MIN_KEEP = 10
 
 # Roboflow YOLOv8 exports use these split dir names.
 SPLIT_MAP = {"train": "train", "valid": "valid", "test": "valid"}
@@ -142,31 +157,27 @@ def merge(export_dir: Path, prefix: str) -> tuple[int, int]:
     names = source_class_names(export_dir)
     id_map: dict[int, int] = {}
     for idx, name in enumerate(names):
-        canonical = CLASS_ALIASES.get(name.lower().strip())
+        canonical = canonical_for(name)
         if canonical:
             id_map[idx] = CANONICAL[canonical]
+    mapped = [names[i] for i in sorted(id_map)]
+    dropped = [n for n in names if n not in mapped]
+    print(f"  classes: keeping {mapped or 'none'}; dropping {dropped or 'none'}")
     if not id_map:
         print(f"  WARNING: no class of {names} maps to canonical classes — skipped")
         return 0, 0
 
-    images = labels = 0
+    # First pass: collect every image with its remapped labels, so negatives
+    # (all labels dropped) can be capped relative to the positives.
+    entries: list[tuple[Path, str, list[str]]] = []  # (image, dst_split, kept_lines)
     for src_split, dst_split in SPLIT_MAP.items():
         img_dir = export_dir / src_split / "images"
         lbl_dir = export_dir / src_split / "labels"
         if not img_dir.is_dir():
             continue
-        dst_img = DATASET_DIR / dst_split / "images"
-        dst_lbl = DATASET_DIR / dst_split / "labels"
-        dst_img.mkdir(parents=True, exist_ok=True)
-        dst_lbl.mkdir(parents=True, exist_ok=True)
-
-        for img in img_dir.iterdir():
+        for img in sorted(img_dir.iterdir()):
             if img.suffix.lower() not in (".jpg", ".jpeg", ".png"):
                 continue
-            new_stem = f"{prefix}__{img.stem}"
-            shutil.copy2(img, dst_img / f"{new_stem}{img.suffix.lower()}")
-            images += 1
-
             src_label = lbl_dir / f"{img.stem}.txt"
             kept: list[str] = []
             if src_label.exists():
@@ -174,8 +185,26 @@ def merge(export_dir: Path, prefix: str) -> tuple[int, int]:
                     remapped = remap_line(line, id_map)
                     if remapped:
                         kept.append(remapped)
-            (dst_lbl / f"{new_stem}.txt").write_text("\n".join(kept) + ("\n" if kept else ""))
-            labels += len(kept)
+            entries.append((img, dst_split, kept))
+
+    positives = [e for e in entries if e[2]]
+    negatives = [e for e in entries if not e[2]]
+    negative_cap = max(NEGATIVE_MIN_KEEP, int(len(positives) * NEGATIVE_RATIO_CAP))
+    if len(negatives) > negative_cap:
+        print(f"  capping negatives: keeping {negative_cap} of {len(negatives)} unlabeled images")
+        negatives = negatives[:negative_cap]
+
+    images = labels = 0
+    for img, dst_split, kept in positives + negatives:
+        dst_img = DATASET_DIR / dst_split / "images"
+        dst_lbl = DATASET_DIR / dst_split / "labels"
+        dst_img.mkdir(parents=True, exist_ok=True)
+        dst_lbl.mkdir(parents=True, exist_ok=True)
+        new_stem = f"{prefix}__{img.stem}"
+        shutil.copy2(img, dst_img / f"{new_stem}{img.suffix.lower()}")
+        (dst_lbl / f"{new_stem}.txt").write_text("\n".join(kept) + ("\n" if kept else ""))
+        images += 1
+        labels += len(kept)
     return images, labels
 
 
