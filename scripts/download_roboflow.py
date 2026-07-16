@@ -156,15 +156,26 @@ def merge(export_dir: Path, prefix: str) -> tuple[int, int]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sources", help="JSON file with a list of {workspace, project, version}")
+    parser.add_argument(
+        "--local", action="append", default=[], metavar="DIR",
+        help="path to an already-downloaded/exported YOLOv8 dataset dir (must contain "
+             "data.yaml) to merge without calling the Roboflow API — repeatable",
+    )
+    parser.add_argument(
+        "--no-remote", action="store_true",
+        help="skip the Roboflow API sources entirely (only merge --local dirs)",
+    )
     args = parser.parse_args()
 
+    remote_sources = [] if args.no_remote else load_sources(args.sources)
     api_key = os.environ.get("ROBOFLOW_API_KEY")
-    if not api_key:
+    if remote_sources and not api_key:
         print("ROBOFLOW_API_KEY is not set", file=sys.stderr)
         return 1
 
     total_images = total_labels = 0
-    for source in load_sources(args.sources):
+
+    for source in remote_sources:
         slug = f"{source['workspace']}/{source['project']}:v{source['version']}"
         print(f"source {slug}")
         try:
@@ -178,9 +189,20 @@ def main() -> int:
         total_images += images
         total_labels += labels
 
+    for local_dir in args.local:
+        path = Path(local_dir)
+        print(f"local {path}")
+        if not (path / "data.yaml").exists():
+            print(f"  no data.yaml in {path} — skipped", file=sys.stderr)
+            continue
+        images, labels = merge(path, path.name)
+        print(f"  merged {images} images, {labels} boxes")
+        total_images += images
+        total_labels += labels
+
     print(f"\ndataset at {DATASET_DIR}: {total_images} images, {total_labels} boxes")
     if total_images == 0:
-        print("Nothing merged — check sources/API key.", file=sys.stderr)
+        print("Nothing merged — check sources/API key/local paths.", file=sys.stderr)
         return 1
     return 0
 
