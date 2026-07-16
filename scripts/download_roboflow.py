@@ -38,10 +38,14 @@ CLASS_ALIASES = {
     "electrical outlet": "outlet",
     "wall socket": "outlet",
     "tomada": "outlet",
+    "plug_2pin": "outlet",
+    "plug_3pin": "outlet",
+    "plug_rectangle": "outlet",
     "switch": "switch",
     "switches": "switch",
     "light switch": "switch",
     "light_switch": "switch",
+    "light-switch": "switch",
     "wall switch": "switch",
     "interruptor": "switch",
     "light": "light",
@@ -56,9 +60,12 @@ CLASS_ALIASES = {
 # Public Roboflow Universe projects used for US-standard pre-training.
 # Format: workspace, project, version. Override with --sources <json file>
 # containing a list of {"workspace", "project", "version"} objects.
+# roboflow-universe-projects/electrical-outlets and /light-switches (the
+# original sources) were removed/renamed upstream — replaced 2026-07 with
+# these confirmed-live public projects.
 DEFAULT_SOURCES = [
-    {"workspace": "roboflow-universe-projects", "project": "electrical-outlets", "version": 1},
-    {"workspace": "roboflow-universe-projects", "project": "light-switches", "version": 1},
+    {"workspace": "yolov5-dtypd", "project": "plug-socket-detect", "version": 1},
+    {"workspace": "biiim", "project": "rocker", "version": 1},
 ]
 
 # Roboflow YOLOv8 exports use these split dir names.
