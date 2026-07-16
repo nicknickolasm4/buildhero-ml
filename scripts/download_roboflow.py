@@ -48,6 +48,10 @@ CLASS_ALIASES = {
     "plug 2pin": "outlet",
     "plug 3pin": "outlet",
     "plug rectangle": "outlet",
+    # socket-and-switch / the combined workspace-acira project label the wall
+    # receptacle "0 Outlet" — this one class is 6277 of the boxes, so missing
+    # it turns thousands of real outlets into empty negatives.
+    "0 outlet": "outlet",
     "switch": "switch",
     "switches": "switch",
     "light switch": "switch",
@@ -81,11 +85,16 @@ def canonical_for(name: str) -> str | None:
 DEFAULT_SOURCES = [
     {"workspace": "yolov5-dtypd", "project": "plug-socket-detect", "version": 1},
     {"workspace": "biiim", "project": "rocker", "version": 1},
-    # Added 2026-07-16: broader outlet/switch coverage for distance recall.
-    # "latest" resolves to the newest generated version at download time.
-    # (logansdg/sensors-switches-and-plugs was removed upstream — API 404s.)
-    {"workspace": "socket-vflei", "project": "socket-and-switch", "version": "latest"},
-    {"workspace": "mateo-ojeda", "project": "light-switch-mqb8v", "version": "latest"},
+    # Added 2026-07-16: the user's own combined project (workspace-acira),
+    # merging outlet/switch/damage sources — 6823 images. Its dominant class
+    # is "0 Outlet" (6277 boxes), aliased above. NOTE: generate a version in
+    # the Roboflow UI first (the project has 0 generated versions and the
+    # download API can only fetch a generated version).
+    {
+        "workspace": "workspace-acira",
+        "project": "switch-and-sockets-sensors-and-plugs-and-socket-damage",
+        "version": "latest",
+    },
 ]
 
 # Images whose labels all got dropped become negatives. A few help precision;
